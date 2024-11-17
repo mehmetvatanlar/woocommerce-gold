@@ -1,0 +1,109 @@
+<?php
+
+/**
+ * Plugin Name: WooCommerce Altın Fiyatlandırma
+ * Description: WooCommerce ürünlerini altın gram fiyatı ve gram çarpanına göre fiyatlandırır.
+ * Version: 1.0
+ * Author: Mehmet Ali Vatanlar
+ * Author URI: https://www.vatanlar.com.tr
+ * License: GPL2
+ * Text Domain: gold-price-calculator
+ * Domain Path: /languages
+ */
+
+
+function gpc_add_submenu_page()
+{
+    add_submenu_page(
+        'woocommerce',
+        'Altın Fiyatlandırma',
+        'Altın Fiyatlandırma',
+        'manage_options',
+        'gold_price_calculator',
+        'gpc_settings_page'
+    );
+}
+add_action('admin_menu', 'gpc_add_submenu_page');
+
+function gpc_settings_page()
+{
+?>
+    <div class="wrap">
+        <h1>Altın Fiyatlandırma Ayarları</h1>
+        <form method="post" action="options.php">
+            <?php
+            settings_fields('gpc_settings_group');
+            do_settings_sections('gpc_settings_group');
+            ?>
+            <table class="form-table">
+                <tr valign="top">
+                    <th scope="row">Altın Gram Fiyatı</th>
+                    <td>
+                        <input type="text" name="gold_price_per_gram" value="<?php echo esc_attr(get_option('gold_price_per_gram')); ?>" />
+                    </td>
+                </tr>
+            </table>
+            <?php submit_button(); ?>
+        </form>
+    </div>
+<?php
+}
+
+function gpc_register_settings()
+{
+    register_setting('gpc_settings_group', 'gold_price_per_gram');
+    register_setting('gpc_settings_group', 'gold_price_multiplier');
+}
+add_action('admin_init', 'gpc_register_settings');
+
+function gpc_update_product_price_based_on_gold_price($price, $product)
+{
+    $gold_price_per_gram = get_option('gold_price_per_gram', 0);
+    $gold_price_per_gram = floatval($gold_price_per_gram);
+
+    if ($gold_price_per_gram <= 0) {
+        return $price;
+    }
+
+    if ($gold_price_per_gram > 0) {
+        $gold_price_multiplier = get_post_meta($product->get_id(), '_gold_price_multiplier', true);
+        $gold_price_multiplier = floatval($gold_price_multiplier);
+
+        if ($gold_price_multiplier <= 0) {
+            return $price;
+        }
+
+        $new_price = $gold_price_per_gram * $gold_price_multiplier;
+        return $new_price;
+    }
+
+    return $price;
+}
+add_filter('woocommerce_product_get_price', 'gpc_update_product_price_based_on_gold_price', 10, 2);
+add_filter('woocommerce_product_get_regular_price', 'gpc_update_product_price_based_on_gold_price', 10, 2);
+add_filter('woocommerce_product_get_sale_price', 'gpc_update_product_price_based_on_gold_price', 10, 2);
+
+function gpc_display_gold_price_multiplier_field()
+{
+    global $post;
+    $gold_price_multiplier = get_post_meta($post->ID, '_gold_price_multiplier', true);
+?>
+    <div class="options_group">
+        <p class="form-field">
+            <label for="gold_price_multiplier"><?php _e('Gram Çarpanı', 'woocommerce'); ?></label>
+            <input type="text" class="short" name="gold_price_multiplier" id="gold_price_multiplier" value="<?php echo esc_attr($gold_price_multiplier); ?>" />
+            <span class="description"><?php _e('Ürünün gram çarpanını girin.', 'woocommerce'); ?></span>
+        </p>
+    </div>
+<?php
+}
+add_action('woocommerce_product_options_pricing', 'gpc_display_gold_price_multiplier_field');
+
+function gpc_save_gold_price_multiplier($post_id)
+{
+    if (isset($_POST['gold_price_multiplier'])) {
+        update_post_meta($post_id, '_gold_price_multiplier', sanitize_text_field($_POST['gold_price_multiplier']));
+    }
+}
+add_action('woocommerce_process_product_meta', 'gpc_save_gold_price_multiplier');
+?>
